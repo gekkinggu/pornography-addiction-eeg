@@ -5,7 +5,7 @@ from scipy import signal
 
 def apply_bandpass_filter(data, lowcut=0.5, highcut=40, sampling_rate=250, order=4):
     """
-    Apply bandpass filter to EEG data.
+    Apply bandpass filter to EEG data with stability improvements.
     
     Args:
         data (np.ndarray): EEG data (samples x channels)
@@ -17,22 +17,60 @@ def apply_bandpass_filter(data, lowcut=0.5, highcut=40, sampling_rate=250, order
     Returns:
         np.ndarray: Filtered EEG data
     """
+    # Validate input data
+    if data.size == 0:
+        print("Warning: Empty data array")
+        return data
+    
+    # Check for and handle non-finite values
+    if not np.all(np.isfinite(data)):
+        print("Warning: Data contains NaN or infinite values, cleaning...")
+        data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+    
     # Calculate Nyquist frequency
     nyquist = sampling_rate / 2
     
-    # Normalize frequencies
-    low_norm = lowcut / nyquist
-    high_norm = highcut / nyquist
+    # Ensure frequency bounds are valid
+    low_norm = max(lowcut / nyquist, 0.001)  # Avoid DC issues
+    high_norm = min(highcut / nyquist, 0.99)  # Stay below Nyquist
     
-    # Design Butterworth bandpass filter
-    b, a = signal.butter(order, [low_norm, high_norm], btype='bandpass')
+    if low_norm >= high_norm:
+        print(f"Error: Invalid frequency range {lowcut}-{highcut} Hz")
+        return data
     
-    # Apply filter to each channel
-    filtered_data = np.zeros_like(data)
-    for channel in range(data.shape[1]):
-        filtered_data[:, channel] = signal.filtfilt(b, a, data[:, channel])
-    
-    return filtered_data
+    try:
+        # Design Butterworth bandpass filter with lower order for stability
+        b, a = signal.butter(min(order, 4), [low_norm, high_norm], btype='bandpass')
+        
+        # Apply filter to each channel with error handling
+        filtered_data = np.zeros_like(data)
+        for channel in range(data.shape[1]):
+            try:
+                # Remove DC component first
+                channel_data = data[:, channel] - np.mean(data[:, channel])
+                
+                # Apply filter
+                filtered_channel = signal.filtfilt(b, a, channel_data)
+                
+                # Check if filtering produced valid results
+                if np.all(np.isfinite(filtered_channel)) and not np.all(filtered_channel == 0):
+                    filtered_data[:, channel] = filtered_channel
+                else:
+                    print(f"Warning: Channel {channel} filter failed, using high-pass only")
+                    # Fallback: simple high-pass filter
+                    sos = signal.butter(2, low_norm, btype='highpass', output='sos')
+                    filtered_data[:, channel] = signal.sosfilt(sos, channel_data)
+                    
+            except Exception as e:
+                print(f"Error filtering channel {channel}: {e}")
+                # Last resort: copy original data
+                filtered_data[:, channel] = data[:, channel]
+        
+        return filtered_data
+        
+    except Exception as e:
+        print(f"Filter design failed: {e}")
+        return data
 
 def process_eeg_file(file_path):
     """
