@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from scipy import signal
 
-def apply_bandpass_filter(data, lowcut=0.5, highcut=40, sampling_rate=250, order=4):
+def apply_bandpass_filter(data, lowcut=0.5, highcut=40, sampling_rate=250, order=2):
     """
     Apply bandpass filter to EEG data with stability improvements.
     
@@ -21,11 +21,14 @@ def apply_bandpass_filter(data, lowcut=0.5, highcut=40, sampling_rate=250, order
     if data.size == 0:
         print("Warning: Empty data array")
         return data
-    
-    # Check for and handle non-finite values
-    if not np.all(np.isfinite(data)):
-        print("Warning: Data contains NaN or infinite values, cleaning...")
-        data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+
+    """
+    the following code is commented out because the data is assumed to be clean.
+    """    
+    # # Check for and handle non-finite values
+    # if not np.all(np.isfinite(data)):
+    #     print("Warning: Data contains NaN or infinite values, cleaning...")
+    #     data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
     
     # Calculate Nyquist frequency
     nyquist = sampling_rate / 2
